@@ -37,6 +37,15 @@ The training process is implemented in the `training.py` file. This script handl
 
 The `run_validation()` function within the `training.py` script is used to evaluate the model's performance on the validation set.
 
+## Inference
+
+The `tests.ipynb` notebook contains code to run inference using the trained model. You can find examples of translating English sentences to Korean using the model.
+
+### How to Run Inference
+
+1. Open the `tests.ipynb` file in Jupyter Notebook or Jupyter Lab.
+2. Run the cells to load the trained model and translate sample sentences.
+
 ## Performance Metrics
 
 Below is a snapshot of the training process displaying the loss value:
