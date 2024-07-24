@@ -65,6 +65,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
 def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, global_step, writer, num_examples=2):
     model.eval()
+    bleu = torchmetrics.BLEUScore()
     count = 0
 
     source_texts = []
@@ -105,6 +106,7 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
             print_msg(f"{f'SOURCE: ':>12}{source_text}")
             print_msg(f"{f'TARGET: ':>12}{target_text}")
             print_msg(f"{f'PREDICTED: ':>12}{model_out_text}")
+            print(f"\nBLEU Score: {bleu(model_out_text, target_text)}")
 
             if count == num_examples:
                 print_msg('-'*console_width)
@@ -211,9 +213,11 @@ def train_model(config):
     initial_epoch = 0
     global_step = 0
     if config['preload']:
+        model_filename = get_weights_file_path(config, f"02")
         # model_filename = get_weights_file_path(config, config['preload'])
-        model_filename = get_weights_file_path(config, f"09")
+        # model_filename = get_weights_file_path(config, f"09")
         print(f'Preloading model {model_filename}')
+        # print(f"GLOBAL STEP  {global_step}================")
         state = torch.load(model_filename)
         initial_epoch = state['epoch'] + 1
         optimizer.load_state_dict(state['optimizer_state_dict'])
@@ -244,6 +248,8 @@ def train_model(config):
             loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
 
             batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
+
+            # run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step, writer)
 
             # Log the loss
             writer.add_scalar('train loss', loss.item(), global_step)

@@ -6,7 +6,7 @@ def get_config():
 
         "batch_size": 8,
         "num_epochs": 20,
-        "lr": 10**-4,
+        "lr": 1e-6,
         "seq_len": 200,
         "d_model": 512,
         "datasource": "msarmi9/korean-english-multitarget-ted-talks-task",
@@ -14,7 +14,9 @@ def get_config():
         "lang_tgt": "korean",
         "model_folder": "weights",
         "model_basename": "tmodel_",
-        "preload": "latest",
+        # "preload": "latest",
+        # "preload": "tmodel_02.pt",
+        "preload": None,
         "tokenizer_file": "tokenizer_{0}.json",
         "experiment_name": "runs/tmodel"
     }
@@ -24,8 +26,7 @@ def get_weights_file_path(config, epoch: str):
     model_folder = config['model_folder']
     model_basename = config['model_basename']
     model_filename = f"{model_basename}{epoch}.pt"
-    # current_dir = Path("config.py").resolve().parent
-    # return str(Path("config.py").resolve().parent.parent / model_folder / model_filename)
+    # return str(Path("config.py").resolve().parent.parent / model_folder / model_filename)///
     return str(Path('.') / model_folder / model_filename)
 
 
