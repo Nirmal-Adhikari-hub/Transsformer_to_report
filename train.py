@@ -4,15 +4,15 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import DataLoader, random_split
 
 # Add the parent directory to the system path
 current_dir = Path(__file__).resolve().parent
 sys.path.append(str(current_dir.parent))
 
-from organized.dataset import BilingualDataset, causal_mask
-from organized.model import build_transformer
-from organized.config import get_weights_file_path, get_config
+from dataset import BilingualDataset, causal_mask
+from model import build_transformer
+from config import get_weights_file_path, get_config
 
 from datasets import load_dataset
 from tokenizers import Tokenizer
@@ -20,6 +20,7 @@ from tokenizers.models import WordLevel
 from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import Whitespace
 
+from transformers import AutoTokenizer
 
 import torchmetrics
 
@@ -30,8 +31,11 @@ from tqdm import tqdm
 
 
 def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device):
-    sos_idx = tokenizer_tgt.token_to_id('[SOS]')
-    eos_idx = tokenizer_tgt.token_to_id('[EOS]')
+    # sos_idx = tokenizer_tgt.token_to_id('[SOS]')
+    # eos_idx = tokenizer_tgt.token_to_id('[EOS]')
+    sos_idx = tokenizer_tgt.bos_token_id
+    eos_idx = tokenizer_tgt.eos_token_id
+
 
     # Precompute the encoder output and reuse it for the every token we get from the decoder
     encoder_output = model.encode(source, source_mask)
@@ -158,8 +162,9 @@ def get_ds(config):
     # ds_raw = load_dataset("msarmi9/korean-english-multitarget-ted-talks-task", f'{config["lang_src"]}-{config["lang_tgt"]}', split='train')
     ds_raw = load_dataset("msarmi9/korean-english-multitarget-ted-talks-task", 'default', split='train')
     # Build tokenizers
-    tokenizer_src = get_or_build_tokenizer(config, ds_raw, config['lang_src'])
-    tokenizer_tgt = get_or_build_tokenizer(config, ds_raw, config['lang_tgt'])
+    tokenizer_src = AutoTokenizer.from_pretrained("beomi/KcELECTRA-base-v2022", bos_token="[SOS]", eos_token="[EOS]")
+    tokenizer_tgt = AutoTokenizer.from_pretrained("beomi/KcELECTRA-base-v2022", bos_token="[SOS]", eos_token="[EOS]")
+
 
     # Keep .9 for training and .1 for validation
     train_ds_size = int(0.9 * len(ds_raw))
@@ -176,8 +181,8 @@ def get_ds(config):
         # src_ids  = tokenizer_src.encode(item(['translation'][config['lang_src']])).ids
         # tgt_ids  = tokenizer_src.encode(item(['translation'][config['lang_tgt']])).ids
 
-        src_ids = tokenizer_src.encode(item[config['lang_src']]).ids
-        tgt_ids = tokenizer_tgt.encode(item[config['lang_tgt']]).ids
+        src_ids = tokenizer_src.encode(item[config['lang_src']])
+        tgt_ids = tokenizer_tgt.encode(item[config['lang_tgt']])
 
         max_len_src = max(max_len_src, len(src_ids))
         max_len_tgt = max(max_len_tgt, len(tgt_ids))
@@ -186,7 +191,7 @@ def get_ds(config):
     print(f'Max length of target sentence : {max_len_tgt}\n')
 
     train_dataloader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
-    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=True)
+    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=False)
 
     return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt
 
@@ -204,11 +209,11 @@ def train_model(config):
     Path(config['model_folder']).mkdir(parents=True, exist_ok=True)
 
     train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
-    model = get_model(config, tokenizer_src.get_vocab_size(), tokenizer_tgt.get_vocab_size()).to(device)
+    model = get_model(config, len(tokenizer_src.get_vocab()), len(tokenizer_tgt.get_vocab())).to(device)
     # Tensorboard
     writer = SummaryWriter(config['experiment_name'])
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], eps=1e-9)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'], eps=1e-9)
 
     initial_epoch = 0
     global_step = 0
@@ -223,7 +228,7 @@ def train_model(config):
         optimizer.load_state_dict(state['optimizer_state_dict'])
         global_step = state['global_step']
 
-    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id('[PAD]'), label_smoothing=0.1).to(device)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.pad_token_id, label_smoothing=0.1).to(device)
 
     for epoch in range(initial_epoch, config['num_epochs']):
         torch.cuda.empty_cache()
@@ -245,7 +250,7 @@ def train_model(config):
             label = batch['label'].to(device) # (B, T)
 
             # (B, T, tgt_vocab_size) -> (B * T, tgt_vocab_size)
-            loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
+            loss = loss_fn(proj_output.view(-1, len(tokenizer_tgt.get_vocab())), label.view(-1))
 
             batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
 

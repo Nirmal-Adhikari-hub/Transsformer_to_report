@@ -7,7 +7,7 @@ def get_config():
         "batch_size": 8,
         "num_epochs": 20,
         "lr": 1e-6,
-        "seq_len": 200,
+        "seq_len": 350,
         "d_model": 512,
         "datasource": "msarmi9/korean-english-multitarget-ted-talks-task",
         "lang_src": "english",
